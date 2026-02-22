@@ -40,7 +40,7 @@ Project subagents take precedence over user subagents when names conflict.
 ### Invoking Subagents
 
 - **Explicit invocation**: Use `/test-class-fixer` in your prompt, e.g. `> /test-class-fixer fix MyTestClass`
-- **Natural mention**: e.g. `> Use the test-class-fixer subagent to fix DKCM_ApprovalHandlerTest`
+- **Natural mention**: e.g. `> Use the test-class-fixer subagent to fix ApprovalHandlerTest`
 
 ---
 
