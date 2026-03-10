@@ -14,17 +14,23 @@ A collection of custom subagents for [Cursor](https://cursor.com) that extend th
 
 To use these subagents across **all your projects**, install them as user-level subagents:
 
-1. **Create the user agents directory** (if it doesn't exist):
+1. **Create the user directories** (if they don't exist):
    ```bash
    mkdir -p ~/.cursor/agents
+   mkdir -p ~/.cursor/scripts
    ```
 
 2. **Copy the subagent file** into `~/.cursor/agents/`:
    ```bash
-   cp subagents/test-class-fixer.md ~/.cursor/agents/
+   cp subagents/test-class-fixer/test-class-fixer.md ~/.cursor/agents/
    ```
 
-3. **Verify installation** — Cursor will automatically discover subagents in `~/.cursor/agents/`. You can invoke them by name in your prompts.
+3. **Copy required scripts** (for subagents that use them) into `~/.cursor/scripts/`:
+   ```bash
+   cp subagents/test-class-fixer/scripts/run-apex-tests.js ~/.cursor/scripts/
+   ```
+
+4. **Verify installation** — Cursor will automatically discover subagents in `~/.cursor/agents/`. You can invoke them by name in your prompts.
 
 ### Alternative: Project-Level Installation
 
@@ -32,8 +38,10 @@ To use a subagent only in a specific project, copy it to that project's `.cursor
 
 ```bash
 mkdir -p .cursor/agents
-cp subagents/test-class-fixer.md .cursor/agents/
+cp subagents/test-class-fixer/test-class-fixer.md .cursor/agents/
 ```
+
+The test-class-fixer subagent uses `run-apex-tests.js`, which must be in `~/.cursor/scripts/`. Ensure you've run the user-level script setup above so the script is available.
 
 Project subagents take precedence over user subagents when names conflict.
 
@@ -50,6 +58,10 @@ Project subagents take precedence over user subagents when names conflict.
 
 The test-class-fixer subagent fixes failing Apex test classes by systematically analyzing errors, identifying root causes, and applying fixes to either the test class or the production class under test—whichever contains the issue.
 
+### Dependencies
+
+- **run-apex-tests.js** — A Node script in `~/.cursor/scripts/` that runs `sf apex run test` and outputs a condensed JSON (summary + failures with messages and stack traces). Install it using the setup steps above.
+
 ### When to Use
 
 - When you provide one or more Apex test class names that are failing
@@ -64,8 +76,8 @@ Accepts test class names as:
 
 ### What It Does
 
-1. **Runs tests** — Executes only the specified test classes via `sf apex run test`
-2. **Analyzes failures** — Parses JSON output for error messages, stack traces, and assertion errors
+1. **Runs tests** — Executes only the specified test classes via `node ~/.cursor/scripts/run-apex-tests.js` (a Node script that runs `sf apex run test` and returns a condensed JSON summary of results and failures)
+2. **Analyzes failures** — Parses the script's JSON output for error messages, stack traces, and assertion errors
 3. **Identifies root cause** — Determines whether the failure is in the test class (assertions, setup, mocking) or the production class (null pointers, logic errors)
 4. **Applies fixes** — Modifies the appropriate file(s) and deploys only the changed classes
 5. **Verifies** — Re-runs tests and repeats up to 5 attempts until all pass or the limit is reached
