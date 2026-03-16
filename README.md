@@ -7,6 +7,7 @@ A collection of custom subagents for [Cursor](https://cursor.com) that extend th
 | Subagent | Description |
 |----------|-------------|
 | [test-class-fixer](#test-class-fixer) | Debugging specialist for Salesforce Apex test classes |
+| [sf-deploy-guard](#sf-deploy-guard) | Deployment safety guard: validates, detects org-vs-local conflicts, deploys only when safe |
 
 ---
 
@@ -28,6 +29,7 @@ To use these subagents across **all your projects**, install them as user-level 
 3. **Copy required scripts** (for subagents that use them) into `~/.cursor/scripts/`:
    ```bash
    cp subagents/test-class-fixer/scripts/run-apex-tests.js ~/.cursor/scripts/
+   cp subagents/sf-deploy-guard/scripts/*.js ~/.cursor/scripts/
    ```
 
 4. **Verify installation** — Cursor will automatically discover subagents in `~/.cursor/agents/`. You can invoke them by name in your prompts.
@@ -41,14 +43,14 @@ mkdir -p .cursor/agents
 cp subagents/test-class-fixer/test-class-fixer.md .cursor/agents/
 ```
 
-The test-class-fixer subagent uses `run-apex-tests.js`, which must be in `~/.cursor/scripts/`. Ensure you've run the user-level script setup above so the script is available.
+The test-class-fixer subagent uses `run-apex-tests.js`, and sf-deploy-guard uses `validate-deploy.js`, `preview-conflicts.js`, `analyze-conflicts.js`, and `execute-deploy.js`. All must be in `~/.cursor/scripts/`. Ensure you've run the user-level script setup above so the scripts are available.
 
 Project subagents take precedence over user subagents when names conflict.
 
 ### Invoking Subagents
 
-- **Explicit invocation**: Use `/test-class-fixer` in your prompt, e.g. `> /test-class-fixer fix MyTestClass`
-- **Natural mention**: e.g. `> Use the test-class-fixer subagent to fix ApprovalHandlerTest`
+- **Explicit invocation**: Use `/test-class-fixer` or `/sf-deploy-guard` in your prompt, e.g. `> /test-class-fixer fix MyTestClass` or `> /sf-deploy-guard deploy MyClass MyLWC`
+- **Natural mention**: e.g. `> Use the test-class-fixer subagent to fix ApprovalHandlerTest` or `> Use sf-deploy-guard to deploy these components`
 
 ---
 
@@ -87,3 +89,46 @@ Accepts test class names as:
 - Uses `sf project deploy start --metadata ApexClass:Name1,ApexClass:Name2` to deploy only modified classes
 - Fixes root causes, not symptoms (e.g., adds proper test data instead of mocking around nulls)
 - Follows Salesforce best practices (Test.startTest/stopTest, proper assertions)
+
+---
+
+## sf-deploy-guard
+
+**Purpose**: Salesforce deployment safety guard. Validates metadata, detects org-vs-local conflicts via diff analysis, and deploys only when safe. Stops on real conflicts and guides the user to merge org changes before deploying.
+
+### Dependencies
+
+Four Node scripts in `~/.cursor/scripts/`:
+- **validate-deploy.js** — Runs `sf project deploy validate`, returns condensed success/errors JSON
+- **preview-conflicts.js** — Runs `sf project deploy preview`, returns only conflict-flagged files
+- **analyze-conflicts.js** — Retrieves org versions to `/tmp`, diffs each file, classifies real vs phantom conflicts, cleans up
+- **execute-deploy.js** — Runs `sf project deploy start`, returns condensed success/failure JSON
+
+Install all four using the setup steps above.
+
+### When to Use
+
+- When deploying components (Apex, LWC, Custom Objects, etc.) to a Salesforce org
+- When you want to avoid overwriting someone else's org changes
+- Works best with scratch orgs or sandboxes that have source tracking enabled
+
+### Input Format
+
+Accepts component names as:
+- Bare names: `MyClass MyLWC MyObject`
+- Typed: `ApexClass:MyClass LightningComponentBundle:MyLWC`
+- Mixed formats, comma or space separated
+
+### What It Does
+
+1. **Validates** — Runs deploy validate; fixes errors up to 3 times
+2. **Previews conflicts** — Checks which files have org-vs-local conflicts
+3. **Analyzes conflicts** — For conflicted files, retrieves org versions and diffs; distinguishes real conflicts (org has unretrieved changes) from phantom conflicts (only local changes)
+4. **Stops on real conflicts** — Explains what org changes would be overwritten, tells the user what to merge, waits for confirmation, then restarts from step 1
+5. **Deploys when safe** — Asks for user confirmation, then deploys only when no real conflicts exist
+
+### Key Practices
+
+- Never deploys when `analyze-conflicts.js` returns any `realConflicts`
+- On real conflicts: stop, explain, wait for user to merge, restart from validate
+- All SF CLI calls go through scripts for token efficiency
