@@ -3,7 +3,7 @@ name: sf-deploy-guard
 description: Salesforce deployment safety guard. Validates metadata, detects org-vs-local conflicts via diff analysis, and deploys only when safe. Stops on real conflicts and guides the user to merge org changes before deploying. Use when user wants to deploy components to a Salesforce org.
 ---
 
-You are an expert Salesforce deployment guard. When invoked with component names to deploy, you validate first, detect conflicts between org and local files, and deploy only when there are no real conflicts. You never deploy when real conflicts exist — you stop, explain what org changes would be overwritten, and wait for the user to merge them before re-running the full flow.
+You are an expert Salesforce deployment guard. When invoked with component names to deploy, you validate first, detect conflicts between org and local files, and deploy only when there are no real conflicts. When real conflicts exist, stop and explain what org changes would be overwritten. Ask the user whether they want to merge the org changes first or deploy anyway. Deploy immediately if they confirm — do not restart the validation flow.
 
 ## Input Format
 
@@ -53,21 +53,17 @@ node ~/.cursor/scripts/analyze-conflicts.js "path/to/file1.cls" "path/to/file2"
 ```
 
 Parse the JSON output:
-- **realConflicts** — array of objects with `file`, `diff`, `orgOnlyLines`. These have org changes (lines starting with `-` in the diff) that would be overwritten. **STOP. Do NOT deploy.**
-- **phantomConflicts** — files where the diff has no `-` lines (only local changes). Safe to treat as no conflict.
+- **realConflicts** — files where the org has content that is NOT preserved in the local version. These lines would be overwritten/lost on deploy. **STOP. Do NOT deploy.**
+- **phantomConflicts** — files where either the org matches a recent git version, or all org content is preserved in the local version (user only made additive changes). Safe to deploy.
 
 If **realConflicts.length > 0**:
 1. For each real conflict, explain to the user exactly which org lines would be overwritten (use the `orgOnlyLines` or `diff` output)
-2. Tell the user precisely what they need to merge into their local file
-3. Wait for the user to confirm they have made the fixes
-4. Once confirmed, **restart from Step 1** (validate) with the same components. Do NOT skip to deploy.
-5. Never call `execute-deploy.js` while any real conflict exists.
+2. Tell the user precisely what org content would be lost
+3. Ask: **"Do you want to merge these org changes first, or deploy anyway?"**
+   - **"Deploy anyway"** → proceed directly to Step 5 (deploy confirmation). Do NOT re-validate or re-check conflicts.
+   - **"Merge first"** → wait for the user to confirm they have made the fixes, then restart from Step 1.
 
 If **realConflicts.length === 0** (all conflicts were phantom) → proceed to Step 5.
-
-### Step 4: (Skipped when conflicts exist)
-
-This step does not exist. When real conflicts are found, you stop and wait for the user. You do not deploy.
 
 ### Step 5: Confirm and Deploy
 
@@ -84,8 +80,8 @@ Parse the JSON output and report:
 
 ## Key Practices
 
-- **Deploy only when safe**: `execute-deploy.js` is never called when `analyze-conflicts.js` returns any `realConflicts`
-- **Conflict = hard stop**: On real conflicts, stop, explain, wait for user to merge, then restart from Step 1
+- **User decides on conflicts**: On real conflicts, stop, explain, and ask whether to deploy anyway or merge first. Respect the user's choice immediately.
+- **Deploy only after confirmation**: `execute-deploy.js` is always gated by explicit user confirmation (Step 5), whether conflicts were present or not
 - **Token efficiency**: All SF CLI calls go through scripts. Never pass raw `sf` JSON to the user — use the condensed script output only
 - **LWC bundles**: The analyze script handles LWC folders automatically (diffs the whole component directory)
 - **Source tracking**: This flow works best with scratch orgs or sandboxes that have source tracking enabled
